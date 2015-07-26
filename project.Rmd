@@ -1,0 +1,142 @@
+---
+title: "Activity Recognition"
+author: "Emel Aktas"
+date: "26 July 2015"
+output: html_document
+---
+
+
+Introduction
+------------
+
+The aim of this project is to recognise activities of people using data recorded by wearable devices such as belts, gloves, arm bands as well as dumbbells equipped with a sensor. Participants are asked to perform Unilateral Dumbbell Biceps Curl in five different fashions; hence, there are five classes of activities to be recognised by the machine learning algorithm. The first activity is correct implementation of lifting whereas the remaining four represent common mistakes as follows:
+
+- Class A: Exactly according to the specification 
+- Class B: Throwing the elbows to the front 
+- Class C: Lifting the dumbbell only halfway
+- Class D: Lowering the dumbbell only halfway 
+- Class E: Throwing the hips to the front
+
+To predict the activity class, a machine learning algorithm is built and then cross-validated. Subsequently, the out-of-sample error is estimated. This report primarily presents these three components of the project and also explains the rationale behind the choices made in this process. The report ends with brief conclusions.
+
+Model Building
+---------------
+The aim of the machine learning model is to predict the activity quality classes A-E as described above from sensor readings. 
+
+```{r}
+# Read training data
+training <- read.csv("pml-training.csv", na.strings=c("NA",""), header=T)
+
+# Read problem sets
+predictionset <- read.csv("pml-testing.csv", na.strings=c("NA",""), header=T)
+# str(training) # check structure - commented out to save space
+dim(training)
+# summary(training) # see the summary of variables - commented out to save space
+
+# Load necessary packages
+library(AppliedPredictiveModeling)
+library(caret)
+library(rattle)
+library(rpart.plot)
+library(randomForest)
+
+# Count how many NAs in each column to exclude those columns from the machine learning algorithm
+NAs <- function(x) {
+    as.vector(apply(x, 2, function(x) length(which(is.na(x)))))
+}
+
+# Count NAs in each column
+columnNAcount <- NAs(training)
+columnNAcount
+
+# Find the variables that do not have NAs 
+# Initialise variable to keep column names
+newdatavars <- c()
+
+# Develop the variable
+for (i in 1:160){
+  if(columnNAcount[i] == 0 ){
+    newdatavars <- c(newdatavars, colnames(training)[i])
+  }
+}
+
+newdatavars
+
+
+# choose smaller data set
+newtraining <- training[newdatavars]
+dim(newtraining)
+
+# Covariates with no variability
+nsv <- nearZeroVar(newtraining, saveMetrics=TRUE)
+nsv
+
+# A quick look suggests new_window is an NZV. Delete new_window
+newtraining <- newtraining[, -which(names(newtraining) %in% c("new_window"))]
+str(newtraining)
+
+# Remove columns 1-6 which will not be needed for prediction
+newtraining <- newtraining[-c(1:6)]
+
+# Split data into training and testing data
+inTrain <- createDataPartition(newtraining$classe, p = .75, list = F)
+trainingdata <- newtraining[inTrain,]
+testingdata <- newtraining[-inTrain,]
+
+```
+
+Cross-validation
+----------------
+```{r}
+# To use three repeats of 10–fold cross–validation
+cvCtrl <- trainControl(method = "repeatedcv", repeats = 3)
+
+# Build the machine learning model classification tree
+modFit1 <- train(classe ~ ., data = trainingdata, preProcess=c("center", "scale"), method = "rpart", trControl = cvCtrl)
+
+# Plot the tree
+fancyRpartPlot(modFit1$finalModel)
+
+
+# Build the machine learning model random forest
+modFit2 <- randomForest(classe ~ . , data = trainingdata)
+
+
+```
+
+
+Expected out-of-sample error
+----------------------------
+```{r}
+# Predict with the CART
+prediction1 <- predict(modFit1, newdata = testingdata)
+confusionMatrix(prediction1, testingdata$classe)
+
+# Predict with the Random Forest
+prediction2 <- predict(modFit2, newdata = testingdata)
+confusionMatrix(prediction2, testingdata$classe)
+
+```
+
+
+
+
+Rationale and Conclusion
+------------------------
+The prediction accuracy is much better with the Random Forests; hence I submitted the prediction from modFit2.
+
+```{r}
+# Predict test set with the Random Forest
+predict(modFit2, newdata = predictionset)
+```
+
+
+
+
+References
+----------
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3geVCgjEB
+
